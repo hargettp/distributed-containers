@@ -111,7 +111,7 @@ perform action dmap = do
 insert :: (Serialize k,Serialize v) => k -> v -> Map k v -> IO ()
 insert key value = perform (Cmd $ InsertPairs [(key,value)])
 
-delete :: forall k v. (Serialize k,Serialize v) => k -> Map k v -> IO ()
+delete :: (Serialize k,Serialize v) => k -> Map k v -> IO ()
 delete key = perform (Cmd $ DeleteKeys [key])
 
 lookup :: (Ord k) => k -> Map k v -> IO (Maybe v)
