@@ -18,22 +18,26 @@
 -----------------------------------------------------------------------------
 
 module Distributed.Data.Map (
-    Map(..),
+    Map,
+    empty,
     MapLog,
     mkMapLog,
+    MapState,
     withMap,
     insert,
     delete,
-    lookup
+    lookup,
+    size
 ) where
 
 -- local imports
+
+import Distributed.Data.Container
 
 -- external imports
 
 import Control.Applicative hiding (empty)
 import Control.Consensus.Raft
-import Control.Concurrent.STM
 
 import qualified Data.Map as M
 
@@ -90,25 +94,18 @@ type MapLog k v = ListLog (MapCommand k v) (MapState k v)
 mkMapLog :: (Ord k,Serialize k,Serialize v) => IO (MapLog k v)
 mkMapLog = mkListLog
 
-type MapRaft k v = Raft (MapLog k v) (MapCommand k v) (MapState k v)
+empty :: IO (MapState k v)
+empty = return $ M.empty
 
-data Map k v = Map {
-    mapClient :: Client,
-    mapRaft :: MapRaft k v
-}
+type Map k v = Container (MapLog k v) (MapCommand k v) (MapState k v)
 
-withMap :: (Ord k,Serialize k,Serialize v) => Endpoint -> Name -> MapLog k v -> RaftState (MapState k v) -> (Map k v -> IO ()) -> IO ()
-withMap endpoint name initialLog initialState fn =
-    withConsensus endpoint name initialLog initialState $ \vMap -> do
-        cfg <- atomically $ do
-            raft <- readTVar $ raftContext vMap
-            return $ raftStateConfiguration $ raftState raft
-        let client = newClient endpoint name cfg
-        fn $ Map client vMap
+withMap :: (Ord k,Serialize k,Serialize v) => Endpoint -> RaftConfiguration -> Name -> MapLog k v -> MapState k v -> (Map k v -> IO ()) -> IO ()
+withMap endpoint cfg name initialLog initialState fn = do
+    withContainer endpoint cfg name initialLog initialState fn
 
 perform :: (Serialize k, Serialize v) => (RaftAction (MapCommand k v)) -> Map k v -> IO ()
 perform action dmap = do
-    _ <- performAction (mapClient dmap) action
+    _ <- performAction (containerClient dmap) action
     return ()
 
 insert :: (Serialize k,Serialize v) => k -> v -> Map k v -> IO ()
@@ -119,7 +116,10 @@ delete key = perform (Cmd $ DeleteKeys [key])
 
 lookup :: (Ord k) => k -> Map k v -> IO (Maybe v)
 lookup key dmap = do
-    state <- atomically $ do
-        raft <- readTVar $ raftContext $ mapRaft dmap
-        return $ raftStateData $ raftState raft
+    state <- containerData dmap
     return $ M.lookup key state
+
+size :: Map k v -> IO Int
+size dmap = do
+    state <- containerData dmap
+    return $ M.size state

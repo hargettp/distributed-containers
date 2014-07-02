@@ -18,21 +18,26 @@
 -----------------------------------------------------------------------------
 
 module Distributed.Data.Variable (
-    Variable(..),
+    Variable,
     VariableLog,
     mkVariableLog,
     withVariable,
+    get,
+    set
 ) where
 
 -- local imports
+
+import Distributed.Data.Container
 
 -- external imports
 
 import Control.Applicative hiding (empty)
 import Control.Consensus.Raft
-import Control.Concurrent.STM
 
-import Data.Serialize
+import Data.Serialize hiding (get)
+
+import qualified Data.Serialize as S
 
 import Network.Endpoints
 
@@ -47,7 +52,7 @@ deriving instance (Eq v) => Eq (VariableCommand v)
 deriving instance (Show v) => Show (VariableCommand v)
 
 instance (Serialize v) => Serialize (VariableCommand v) where
-    get = SetVariable <$> get
+    get = SetVariable <$> S.get
 
     put (SetVariable val) = put val
 
@@ -64,18 +69,18 @@ instance State (VariableState v) IO (VariableCommand v) where
 
     applyEntry _ (SetVariable value) = return value
 
-type VariableRaft v = Raft (VariableLog v) (VariableCommand v) (VariableState v)
+type Variable v = Container (VariableLog v) (VariableCommand v) (VariableState v)
 
-data Variable v = Variable {
-    variableClient :: Client,
-    variableRaft :: VariableRaft v
-}
+withVariable :: (Serialize v) => Endpoint -> RaftConfiguration -> Name -> VariableLog v -> VariableState v -> (Variable v -> IO ()) -> IO ()
+withVariable endpoint cfg name initialLog initialState fn = do
+    withContainer endpoint cfg name initialLog initialState fn
 
-withVariable :: (Serialize v) => Endpoint -> Name -> VariableLog v -> RaftState (VariableState v) -> (Variable v -> IO ()) -> IO ()
-withVariable endpoint name initialLog initialState fn =
-    withConsensus endpoint name initialLog initialState $ \vVariable -> do
-        cfg <- atomically $ do
-            raft <- readTVar $ raftContext vVariable
-            return $ raftStateConfiguration $ raftState raft
-        let client = newClient endpoint name cfg
-        fn $ Variable client vVariable
+get :: Variable v -> IO v
+get variable = do
+    state <- containerData variable
+    return $ state
+
+set :: (Serialize v) => v -> Variable v -> IO ()
+set value variable = do
+    _ <- performAction (containerClient variable) $ Cmd $ SetVariable value
+    return ()
