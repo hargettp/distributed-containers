@@ -19,7 +19,7 @@
 
 module Distributed.Data.Map (
     Map(..),
-    MapLog(..),
+    MapLog,
     mkMapLog,
     withMap,
     insert,
@@ -85,46 +85,10 @@ instance (Ord k) => State (MapState k v) IO (MapCommand k v) where
                 let new = M.delete key old
                     in applyKeys new rest
 
-data MapLog k v = MapLog {
-    mapLogLastCommitted :: RaftTime,
-    mapLogLastAppended :: RaftTime,
-    mapLogEntries :: [RaftLogEntry (MapCommand k v)]
-}
+type MapLog k v = ListLog (MapCommand k v) (MapState k v)
 
-instance (Ord k,Serialize k,Serialize v) => Log (MapLog k v) IO (RaftLogEntry (MapCommand k v)) (RaftState (MapState k v)) where
-
-    lastCommitted log = logIndex $ mapLogLastCommitted log
-
-    lastAppended log = logIndex $ mapLogLastAppended log
-
-    appendEntries log index newEntries = do
-        if null newEntries
-            then return log
-            else do
-                let term = maximum $ map entryTerm newEntries
-                return log {
-                    mapLogLastAppended = RaftTime term (index + (length newEntries) - 1),
-                    mapLogEntries = (take (index + 1) (mapLogEntries log)) ++ newEntries
-                }
-    fetchEntries log index count = do
-        let entries = mapLogEntries log
-        return $ take count $ drop index entries
-
-    commitEntry oldLog commitIndex entry = do
-        let newLog = oldLog {
-                mapLogLastCommitted = RaftTime (entryTerm entry) commitIndex
-                }
-        return newLog
-
-    checkpoint oldLog oldState = return (oldLog,oldState)
-
-instance (Ord k,Serialize k,Serialize v) => RaftLog (MapLog k v) (MapCommand k v) (MapState k v) where
-    lastAppendedTime = mapLogLastAppended
-    lastCommittedTime = mapLogLastCommitted
-
-mkMapLog :: IO (MapLog k v)
-mkMapLog = let initial = RaftTime (-1) (-1)
-               in return $ MapLog initial initial []
+mkMapLog :: (Ord k,Serialize k,Serialize v) => IO (MapLog k v)
+mkMapLog = mkListLog
 
 type MapRaft k v = Raft (MapLog k v) (MapCommand k v) (MapState k v)
 
