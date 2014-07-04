@@ -44,9 +44,9 @@ import Test.Framework.Providers.HUnit
 
 tests :: IO [Test.Framework.Test]
 tests = return [
-    testCase "empty" testEmpty,
-    testCase "1server" test1Server,
-    testCase "3servers" test3Servers
+    testCase "map-empty" testEmpty,
+    testCase "map-1server" test1Server,
+    testCase "map-3servers" test3Servers
     ]
 
 testEmpty :: Assertion

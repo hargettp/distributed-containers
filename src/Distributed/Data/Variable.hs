@@ -75,12 +75,12 @@ withVariable :: (Serialize v) => Endpoint -> RaftConfiguration -> Name -> Variab
 withVariable endpoint cfg name initialLog initialState fn = do
     withContainer endpoint cfg name initialLog initialState fn
 
-get :: Variable v -> IO v
-get variable = do
-    state <- containerData variable
-    return $ state
+get :: (Serialize v) => Variable v -> Causal v
+get variable = Causal $ \index -> do
+    (state,now) <- containerDataAt variable index
+    return (state,now)
 
-set :: (Serialize v) => v -> Variable v -> IO ()
-set value variable = do
-    _ <- performAction (containerClient variable) $ Cmd $ SetVariable value
-    return ()
+set :: (Serialize v) => v -> Variable v -> Causal ()
+set value variable = Causal $ \_ -> do
+    index <- perform (Cmd $ SetVariable value) variable
+    return ((),index)
