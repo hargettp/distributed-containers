@@ -13,6 +13,7 @@
 -----------------------------------------------------------------------------
 
 module TestHelpers (
+    timeBound,
     servers,
     withTransport,
     withEndpoint,
@@ -28,6 +29,7 @@ import Distributed.Data.Container
 -- external imports
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Consensus.Raft
 import Control.Exception
@@ -40,6 +42,12 @@ import Test.HUnit
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+
+timeBound :: Int -> IO () -> IO ()
+timeBound time fn = do
+    outcome <- race (threadDelay time)
+        fn
+    assertEqual "Test should not block" (Right ()) outcome
 
 --------------------------------------------------------------------------------
 -- Consistency

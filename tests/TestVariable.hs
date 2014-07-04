@@ -48,7 +48,7 @@ tests = return [
     ]
 
 test1Server :: Assertion
-test1Server = do
+test1Server = timeBound (1000000) $ do
     let name = servers !! 0
         cfg = newTestConfiguration [name]
     withTransport newMemoryTransport $ \transport ->
@@ -61,7 +61,7 @@ test1Server = do
                 liftIO $ assertEqual "Second value shoould be 2" 2 value2
 
 test3Servers :: Assertion
-test3Servers = do
+test3Servers = timeBound (30000000) $ do
     with3VariableServers (0 :: Int) $ \vVariables -> causally $ do
         let [vVar1,vVar2,_] = vVariables
         value1 <- V.get vVar1
@@ -82,7 +82,7 @@ withVariableServer endpoint cfg name initialState fn = do
     V.withVariable endpoint cfg name initialLog initialState fn
 
 with3VariableServers :: (Serialize v) => v -> ([V.Variable v ] -> IO ()) -> IO ()
-with3VariableServers initialState fn = do
+with3VariableServers initialState fn = timeBound (1000000) $ do
     let names = take 3 servers
         [name1,name2,name3] = names
         cfg = newTestConfiguration names

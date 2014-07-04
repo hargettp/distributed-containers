@@ -57,7 +57,7 @@ testEmpty = do
     assertEqual "Should have a an empty map" 0 size
 
 test1Server :: Assertion
-test1Server = do
+test1Server = timeBound (1000000) $ do
     let name = servers !! 0
         cfg = newTestConfiguration [name]
     withTransport newMemoryTransport $ \transport ->
@@ -76,7 +76,7 @@ test1Server = do
                 liftIO $ assertEqual "Size should be 0" 0 deletedSize
 
 test3Servers :: Assertion
-test3Servers = do
+test3Servers = timeBound (10000000) $ do
     with3MapServers $ \vMaps -> causally $ do
         let [vMap1,vMap2,_] = vMaps
         liftIO $ assertBool "we made it!" True
