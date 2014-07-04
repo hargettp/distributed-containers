@@ -12,7 +12,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Tests (
+module Main (
     main
 ) where
 
@@ -26,7 +26,6 @@ import qualified TestVariable as V
 import Control.Applicative
 import Control.Concurrent
 
-import System.Directory
 import System.Info
 import System.IO
 import System.Log.Formatter
@@ -50,11 +49,6 @@ main = do
 
 initLogging :: IO ()
 initLogging = do
-  let logFile = "tests.log"
-  exists <- doesFileExist logFile
-  if exists
-    then removeFile logFile
-    else return ()
   s <- streamHandler stdout INFO
   let fs = setFormatter s $ simpleLogFormatter "$time [$prio] - $msg"
   updateGlobalLogger rootLoggerName (setLevel WARNING)
