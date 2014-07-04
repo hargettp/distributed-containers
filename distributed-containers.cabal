@@ -30,6 +30,7 @@ library
   exposed-modules:
                         Distributed.Data.Container
                         Distributed.Data.Map
+                        Distributed.Data.Set
                         Distributed.Data.Variable
 
   default-language:    Haskell2010
