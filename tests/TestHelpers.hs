@@ -34,8 +34,6 @@ import Control.Concurrent.STM
 import Control.Consensus.Raft
 import Control.Exception
 
-import Debug.Trace
-
 import Network.Endpoints
 
 import Test.HUnit
@@ -53,32 +51,18 @@ timeBound time fn = do
 -- Consistency
 --------------------------------------------------------------------------------
 
-waitForLeader :: Integer -> Integer -> [Container l e v] -> IO (Maybe Name)
-waitForLeader maxCount attempt vContainers = do
+waitForLeader :: [Container l e v] -> IO (Maybe Name)
+waitForLeader vContainers = do
     let vRafts = map containerRaft vContainers
-    leaders <- allLeaders vRafts
-    let leader = leaders !! 0
-    if maxCount <= 0
-        then do
-            assertBool ("No leader found after " ++ (show (attempt - 1)) ++ " rounds: " ++ (show leaders)) False
-            return Nothing
-        else do
-            pause
-            if (leader /= Nothing) && (all (== leader) leaders)
-                then do
-                    let msg = "After " ++ (show attempt) ++ " rounds, the leader is " ++ (show leader)
-                    if attempt > 3
-                        then traceIO msg
-                        else traceIO msg
-                    return leader
-                else
-                    waitForLeader (maxCount - 1) (attempt + 1) vContainers
-
-allLeaders :: [Raft l e v] -> IO [Maybe Name]
-allLeaders vRafts = do
-    rafts <- mapM (\vRaft -> atomically $ readTVar $ raftContext vRaft) vRafts
-    let leaders = map (clusterLeader . clusterConfiguration . raftStateConfiguration . raftState) rafts
-    return leaders
+    atomically $ do
+        rafts <- mapM (\vRaft -> readTVar $ raftContext vRaft) vRafts
+        let leaders = map (clusterLeader . clusterConfiguration . raftStateConfiguration . raftState) rafts
+            leader = leaders !! 0
+        if (leader /= Nothing) && (all (== leader) leaders)
+            then do
+                return leader
+            else
+                retry
 
 --------------------------------------------------------------------------------
 -- Initial configuration

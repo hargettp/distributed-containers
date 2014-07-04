@@ -76,7 +76,7 @@ test1Server = timeBound (1000000) $ do
                 liftIO $ assertEqual "Size should be 0" 0 deletedSize
 
 test3Servers :: Assertion
-test3Servers = timeBound (10000000) $ do
+test3Servers = timeBound (30 * 1000000) $ do
     with3MapServers $ \vMaps -> causally $ do
         let [vMap1,vMap2,_] = vMaps
         liftIO $ assertBool "we made it!" True

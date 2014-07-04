@@ -20,5 +20,6 @@ extra-packages: ! 'Hackage: hslogger 1.2.3
   Local: raft 0.1.0.1'
 ghc-args:
 - -Wall
+- -threaded
 excluded-modules:
 - Setup.hs

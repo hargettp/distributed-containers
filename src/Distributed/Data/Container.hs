@@ -83,8 +83,15 @@ Ordering distributed operations together with local operations can be tricky: a 
 operation may not have completed before an application is ready to perform a local operation
 that should causally occur after the distributed operation has successfully completed.
 Thus, the `Causal` monad: it ensures causal ordering of operations, so that one
-can write sequential code with the expected semantics. Specifically, operations sequenced
-earlier in the monad will logically occur before operations sequenced later in the monad.
+can write sequential code with guarantees of "happens before" ordering. That is, lines
+earlier in a monad are guaranteed to execute before lines later in the monad. Pragmatically,
+this means that read operations ordered after a write operation are guaranteed to see the 
+effects of the write operation.
+
+Note that the `Causal` monad provides no guarantee of atomicity, however: while reads ordered
+after writes are guaranteed to see the effects of the earlier write, they are not guaranteed
+to only see the effects of the earlier write, as other threads (or other members of the cluster)
+may have succeeded in sequence write before the read is performed.
 -}
 newtype Causal a = Causal (Index -> IO (a, Index))
 
