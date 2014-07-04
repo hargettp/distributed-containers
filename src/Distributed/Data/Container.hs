@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Distributed.Data.Container
@@ -15,13 +17,20 @@
 module Distributed.Data.Container (
     Container(..),
     containerData,
-    withContainer
+    containerDataAt,
+    withContainer,
+    Causal(..),
+    liftIO,
+    waitUntil,
+    perform,
+    causally
 ) where
 
 -- local imports
 
 -- external imports
 
+import Control.Applicative
 import Control.Concurrent.STM
 import Control.Consensus.Raft
 
@@ -40,10 +49,74 @@ containerData container = atomically $ do
         raft <- readTVar $ raftContext $ containerRaft container
         return $ raftStateData $ raftState raft
 
+containerDataAt :: (RaftLog l e v) => Container l e v -> Index -> IO (v,Index)
+containerDataAt container time = atomically $ do
+        raft <- readTVar $ raftContext $ containerRaft container
+        let now = (lastCommitted $ raftLog raft)
+        if now < time
+            then retry
+            else return (raftStateData $ raftState raft,now)
+
 withContainer :: (RaftLog l e v) => Endpoint -> RaftConfiguration -> Name -> l -> v -> (Container l e v -> IO ()) -> IO ()
 withContainer endpoint cfg name initialLog initialData fn = do
     let initialState = mkRaftState initialData cfg name
     withConsensus endpoint name initialLog initialState $ \vRaft -> do
         let client = newClient endpoint name cfg
         fn $ Container client vRaft
+
+waitUntil :: (RaftLog l e v) => Container l e v -> Index -> IO Index
+waitUntil container index = atomically $ do
+    raft <- readTVar $ raftContext $ containerRaft container
+    let now = lastCommitted $ raftLog raft
+    if now < index
+        then retry
+        else return now
+
+perform :: (RaftLog l e v) => RaftAction e -> Container l e v -> IO Index
+perform action container = do
+    time <- performAction (containerClient container) action
+    -- here we wait until the action is committed before continuing
+    waitUntil container $ logIndex time
+
+{-|
+Ordering distributed operations together with local operations can be tricky: a distributed
+operation may not have completed before an application is ready to perform a local operation
+that should causally occur after the distributed operation has successfully completed.
+Thus, the `Causal` monad: it ensures causal ordering of operations, so that one
+can write sequential code with the expected semantics. Specifically, operations sequenced
+earlier in the monad will logically occur before operations sequenced later in the monad.
+-}
+newtype Causal a = Causal (Index -> IO (a, Index))
+
+liftIO :: IO a -> Causal a
+liftIO action = Causal $ \index -> do
+    val <- action
+    return $ (val,index)
+
+causally :: Causal a -> IO a
+causally (Causal action) = do
+    (value,_) <- action $ (-1)
+    return value
+
+instance Functor Causal where
+    -- fmap :: (a -> b) -> f a -> f b
+    fmap ab (Causal fa) = Causal $ \time -> do
+        (a,aTime) <- fa time
+        return $ (ab a,aTime)
+
+instance Applicative Causal where
+    pure = return
+    -- (<*>) :: f (a -> b) -> f a -> f b
+    Causal fab <*> Causal fa = Causal $ \time -> do
+        (fn,fnTime) <- fab time
+        (a,aTime) <- fa fnTime
+        return $ (fn a,aTime)
+
+instance Monad Causal where
+    (Causal ma) >>= amb = Causal $ \time -> do
+        (val,newTime) <- ma time
+        let Causal mb = amb val
+        mb newTime
+    return a = Causal $ \time -> return (a,time)
+
 

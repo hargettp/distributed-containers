@@ -16,19 +16,64 @@ module TestHelpers (
     servers,
     withTransport,
     withEndpoint,
-    newTestConfiguration
+    newTestConfiguration,
+    pause,
+    waitForLeader
 ) where
 
 -- local imports
 
+import Distributed.Data.Container
+
 -- external imports
 
+import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Consensus.Raft
 import Control.Exception
 
+import Debug.Trace
+
 import Network.Endpoints
 
+import Test.HUnit
+
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- Consistency
+--------------------------------------------------------------------------------
+
+waitForLeader :: Integer -> Integer -> [Container l e v] -> IO (Maybe Name)
+waitForLeader maxCount attempt vContainers = do
+    let vRafts = map containerRaft vContainers
+    leaders <- allLeaders vRafts
+    let leader = leaders !! 0
+    if maxCount <= 0
+        then do
+            assertBool ("No leader found after " ++ (show (attempt - 1)) ++ " rounds: " ++ (show leaders)) False
+            return Nothing
+        else do
+            pause
+            if (leader /= Nothing) && (all (== leader) leaders)
+                then do
+                    let msg = "After " ++ (show attempt) ++ " rounds, the leader is " ++ (show leader)
+                    if attempt > 3
+                        then traceIO msg
+                        else traceIO msg
+                    return leader
+                else
+                    waitForLeader (maxCount - 1) (attempt + 1) vContainers
+
+allLeaders :: [Raft l e v] -> IO [Maybe Name]
+allLeaders vRafts = do
+    rafts <- mapM (\vRaft -> atomically $ readTVar $ raftContext vRaft) vRafts
+    let leaders = map (clusterLeader . clusterConfiguration . raftStateConfiguration . raftState) rafts
+    return leaders
+
+--------------------------------------------------------------------------------
+-- Initial configuration
 --------------------------------------------------------------------------------
 
 servers :: [Name]
@@ -53,16 +98,17 @@ newTestConfiguration members = (mkRaftConfiguration members) {clusterTimeouts = 
 testTimeouts :: Timeouts
 testTimeouts = timeouts (25 * 1000)
 
+pause :: IO ()
+pause = threadDelay serverTimeout
+
+serverTimeout :: Timeout
+serverTimeout = 2 * (snd $ timeoutElectionRange testTimeouts)
+
 {-
 newSocketTestConfiguration :: [Name] -> RaftConfiguration
 newSocketTestConfiguration members = (mkRaftConfiguration members) {clusterTimeouts = testSocketTimeouts}
 
-pause :: IO ()
-pause = threadDelay serverTimeout
-
 testSocketTimeouts :: Timeouts
 testSocketTimeouts = timeouts (150 * 1000)
 
-serverTimeout :: Timeout
-serverTimeout = 2 * (snd $ timeoutElectionRange testTimeouts)
 -}

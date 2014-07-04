@@ -103,23 +103,22 @@ withMap :: (Ord k,Serialize k,Serialize v) => Endpoint -> RaftConfiguration -> N
 withMap endpoint cfg name initialLog initialState fn = do
     withContainer endpoint cfg name initialLog initialState fn
 
-perform :: (Serialize k, Serialize v) => (RaftAction (MapCommand k v)) -> Map k v -> IO ()
-perform action dmap = do
-    _ <- performAction (containerClient dmap) action
-    return ()
+insert :: (Ord k,Serialize k,Serialize v) => k -> v -> Map k v -> Causal ()
+insert key value dmap = Causal $ \_ -> do
+    index <- perform (Cmd $ InsertPairs [(key,value)]) dmap
+    return $ ((),index)
 
-insert :: (Serialize k,Serialize v) => k -> v -> Map k v -> IO ()
-insert key value = perform (Cmd $ InsertPairs [(key,value)])
+delete :: (Ord k,Serialize k,Serialize v) => k -> Map k v -> Causal ()
+delete key dmap = Causal $ \_ -> do
+    index <- perform (Cmd $ DeleteKeys [key]) dmap
+    return $ ((),index)
 
-delete :: (Serialize k,Serialize v) => k -> Map k v -> IO ()
-delete key = perform (Cmd $ DeleteKeys [key])
+lookup :: (Ord k,Serialize k,Serialize v) => k -> Map k v -> Causal (Maybe v)
+lookup key dmap = Causal $ \index -> do
+    (state,now) <- containerDataAt dmap index
+    return $ (M.lookup key state,now)
 
-lookup :: (Ord k) => k -> Map k v -> IO (Maybe v)
-lookup key dmap = do
-    state <- containerData dmap
-    return $ M.lookup key state
-
-size :: Map k v -> IO Int
-size dmap = do
-    state <- containerData dmap
-    return $ M.size state
+size :: (Ord k,Serialize k,Serialize v) => Map k v -> Causal Int
+size dmap = Causal $ \index -> do
+    (state,now) <- containerDataAt dmap index
+    return (M.size state,now)

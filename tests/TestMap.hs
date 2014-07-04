@@ -24,8 +24,13 @@ import TestHelpers
 
 -- external imports
 
-import qualified Data.Map as M
+import Control.Consensus.Raft
 
+import Distributed.Data.Container
+import qualified Data.Map as M
+import Data.Serialize
+
+import Network.Endpoints
 import Network.Transport.Memory
 
 import Prelude hiding (log)
@@ -40,7 +45,8 @@ import Test.Framework.Providers.HUnit
 tests :: IO [Test.Framework.Test]
 tests = return [
     testCase "empty" testEmpty,
-    testCase "1server" test1Server
+    testCase "1server" test1Server,
+    testCase "3servers" test3Servers
     ]
 
 testEmpty :: Assertion
@@ -56,54 +62,57 @@ test1Server = do
         cfg = newTestConfiguration [name]
     withTransport newMemoryTransport $ \transport ->
         withEndpoint transport name $ \endpoint -> do
-            initialLog <- DM.mkMapLog
-            initialState <- DM.empty :: IO (DM.MapState String String)
-            DM.withMap endpoint cfg name initialLog initialState $ \vMap -> do
-                assertBool "we made it!" True
-                DM.insert "foo" "bar" vMap
+            withMapServer endpoint cfg name $ \vMap -> causally $ do
+                liftIO $ assertBool "we made it!" True
+                _ <- DM.insert "foo" "bar" vMap
                 value <- DM.lookup "foo" vMap
-                assertEqual "Lookup value should equal insert value" (Just "bar") value
+                liftIO $ assertEqual "Lookup value should equal insert value" (Just "bar") value
                 size <- DM.size vMap
-                assertEqual "Size should be 1" 1 size
-                DM.delete "foo" vMap
+                liftIO $ assertEqual "Size should be 1" 1 size
+                _ <- DM.delete "foo" vMap
                 deletedValue <- DM.lookup "foo" vMap
-                assertEqual "Lookup value should be nothing" Nothing deletedValue
+                liftIO $ assertEqual "Lookup value should be nothing" Nothing deletedValue
                 deletedSize <- DM.size vMap
-                assertEqual "Size should be 0" 0 deletedSize
+                liftIO $ assertEqual "Size should be 0" 0 deletedSize
+
+test3Servers :: Assertion
+test3Servers = do
+    with3MapServers $ \vMaps -> causally $ do
+        let [vMap1,vMap2,_] = vMaps
+        liftIO $ assertBool "we made it!" True
+        DM.insert "foo" "bar" vMap1
+        value1 <- DM.lookup "foo" vMap1
+        liftIO $ assertEqual "Lookup value1 should equal insert value" (Just "bar") value1
+        value2 <- DM.lookup "foo" vMap2
+        liftIO $ assertEqual "Lookup value2 should equal insert value" (Just "bar") value2
+        size <- DM.size vMap2
+        liftIO $ assertEqual "Size should be 1" 1 size
+        DM.delete "foo" vMap1
+        deletedValue <- DM.lookup "foo" vMap2
+        liftIO $ assertEqual "Lookup value should be nothing" Nothing deletedValue
+        deletedSize <- DM.size vMap2
+        liftIO $ assertEqual "Size should be 0" 0 deletedSize
 
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
 
-{-
-withEndpoint :: Transport -> Name -> (Endpoint -> IO ()) -> IO ()
-withEndpoint transport name fn = do
-    endpoint <- newEndpoint [transport]
-    bindEndpoint_ endpoint name
-    finally (fn endpoint)
-        (unbindEndpoint_ endpoint name)
+withMapServer :: (Ord k,Serialize k,Serialize v) => Endpoint -> RaftConfiguration -> Name -> (DM.Map k v -> IO ()) -> IO ()
+withMapServer endpoint cfg name fn = do
+    initialLog <- DM.mkMapLog
+    initialState <- DM.empty
+    DM.withMap endpoint cfg name initialLog initialState fn
 
-withTransport :: IO Transport -> (Transport -> IO ()) -> IO ()
-withTransport factory fn = do
-    bracket factory
-        shutdown
-        fn
-
-newTestConfiguration :: [Name] -> RaftConfiguration
-newTestConfiguration members = (mkRaftConfiguration members) {clusterTimeouts = testTimeouts}
-
-testTimeouts :: Timeouts
-testTimeouts = timeouts (25 * 1000)
-
-newSocketTestConfiguration :: [Name] -> RaftConfiguration
-newSocketTestConfiguration members = (mkRaftConfiguration members) {clusterTimeouts = testSocketTimeouts}
-
-pause :: IO ()
-pause = threadDelay serverTimeout
-
-testSocketTimeouts :: Timeouts
-testSocketTimeouts = timeouts (150 * 1000)
-
-serverTimeout :: Timeout
-serverTimeout = 2 * (snd $ timeoutElectionRange testTimeouts)
--}
+with3MapServers :: (Ord k,Serialize k,Serialize v) => ([DM.Map k v ] -> IO ()) -> IO ()
+with3MapServers fn = do
+    let names = take 3 servers
+        [name1,name2,name3] = names
+        cfg = newTestConfiguration names
+    withTransport newMemoryTransport $ \transport ->
+        withEndpoint transport name1 $ \endpoint1 -> do
+            withMapServer endpoint1 cfg name1 $ \vMap1 -> do
+                withEndpoint transport name2 $ \endpoint2 -> do
+                    withMapServer endpoint2 cfg name2 $ \vMap2 -> do
+                        withEndpoint transport name3 $ \endpoint3 -> do
+                            withMapServer endpoint3 cfg name3 $ \vMap3 -> do
+                                fn [vMap1,vMap2,vMap3]
