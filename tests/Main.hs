@@ -20,6 +20,7 @@ module Main (
 
 import qualified TestMap as M
 import qualified TestVariable as V
+import qualified TestSet as S
 
 -- external imports
 
@@ -65,4 +66,5 @@ printPlatform = do
 tests :: IO [Test.Framework.Test]
 tests = (++)
     <$> M.tests
-    <*> V.tests
+    <*> ((++) <$> V.tests
+        <*> S.tests)
