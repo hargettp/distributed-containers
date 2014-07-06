@@ -78,7 +78,6 @@ test1Server = timeBound (1000000) $ do
 test3Servers :: Assertion
 test3Servers = timeBound (30 * 1000000) $ do
     with3MapServers $ \vMaps -> causally $ do
-        _ <- liftIO $ waitForLeader vMaps
         let [vMap1,vMap2,_] = vMaps
         liftIO $ assertBool "we made it!" True
         DM.insert "foo" "bar" vMap1

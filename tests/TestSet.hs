@@ -67,7 +67,6 @@ test1Server = timeBound (1000000) $ do
 test3Servers :: Assertion
 test3Servers = with3SetServers (Set.empty :: Set.Set String) $ \vSets -> timeBound (30 * 1000000) $
     causally $ do
-        _ <- liftIO $ waitForLeader vSets
         let [vSet1,vSet2,_] = vSets
         elements <- S.elems vSet1
         liftIO $ assertBool "Initial set should be empty" $ null elements

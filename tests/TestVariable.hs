@@ -63,7 +63,6 @@ test1Server = timeBound (1000000) $ do
 test3Servers :: Assertion
 test3Servers = with3VariableServers (0 :: Int) $ \vVariables -> timeBound (30 * 1000000) $
     causally $ do
-        _ <- liftIO $ waitForLeader vVariables
         let [vVar1,vVar2,_] = vVariables
         value1 <- V.get vVar1
         liftIO $ assertEqual "Initial value shoould be 0" 0 value1
