@@ -80,15 +80,9 @@ instance (Ord v) => State (SetState v) IO (SetCommand v) where
 
     canApplyEntry _ _ = return True
 
-    applyEntry initial (InsertElements values) = return $ insertValues initial values
-        where
-            insertValues old [] = old
-            insertValues old (value:rest) = insertValues (S.insert value old) rest
+    applyEntry initial (InsertElements values) = return $ foldl (\old value -> S.insert value old) initial values
 
-    applyEntry initial (DeleteElements values) = return $ deleteValues initial values
-        where
-            deleteValues old [] = old
-            deleteValues old (value:rest) = deleteValues (S.delete value old) rest
+    applyEntry initial (DeleteElements values) = return $ foldl (\old value -> S.delete value old) initial values
 
 type Set v = Container (SetLog v) (SetCommand v) (SetState v)
 

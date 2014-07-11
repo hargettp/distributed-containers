@@ -75,19 +75,10 @@ instance (Ord k) => State (MapState k v) IO (MapCommand k v) where
     canApplyEntry _ _ = return True
 
     applyEntry initial (InsertPairs pairs) = do
-        return $ applyPairs initial pairs
-        where
-            applyPairs old [] = old
-            applyPairs old ((key,value):rest) =
-                let new = M.insert key value old
-                    in applyPairs new rest
+        return $ foldl (\old (key,value) -> M.insert key value old)  initial pairs
+
     applyEntry initial (DeleteKeys keys) = do
-        return $ applyKeys initial keys
-        where
-            applyKeys old [] = old
-            applyKeys old (key:rest) = 
-                let new = M.delete key old
-                    in applyKeys new rest
+        return $ foldl (\old key -> M.delete key old)  initial keys
 
 type MapLog k v = ListLog (MapCommand k v) (MapState k v)
 
