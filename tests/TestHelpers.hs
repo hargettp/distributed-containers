@@ -19,7 +19,8 @@ module TestHelpers (
     withEndpoint,
     newTestConfiguration,
     pause,
-    waitForLeader
+    waitForLeader,
+    troubleshoot
 ) where
 
 -- local imports
@@ -35,6 +36,8 @@ import Control.Consensus.Raft
 import Control.Exception
 
 import Network.Endpoints
+
+import System.Log.Logger
 
 import Test.HUnit
 
@@ -104,3 +107,9 @@ testSocketTimeouts :: Timeouts
 testSocketTimeouts = timeouts (150 * 1000)
 
 -}
+
+troubleshoot :: IO () -> IO ()
+troubleshoot fn = do
+    finally (do
+        updateGlobalLogger rootLoggerName (setLevel INFO)
+        fn) (updateGlobalLogger rootLoggerName (setLevel WARNING))
