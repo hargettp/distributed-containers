@@ -18,13 +18,14 @@ module Main (
 
 -- local imports
 
+import qualified TestFifo as F
 import qualified TestMap as M
-import qualified TestVariable as V
+import qualified TestQueue as Q
 import qualified TestSet as S
+import qualified TestVariable as V
 
 -- external imports
 
-import Control.Applicative
 import Control.Concurrent
 
 import System.Info
@@ -64,7 +65,10 @@ printPlatform = do
     putStrLn ""
 
 tests :: IO [Test.Framework.Test]
-tests = (++)
-    <$> M.tests
-    <*> ((++) <$> V.tests
-        <*> S.tests)
+tests = do
+    m <- M.tests
+    v <- V.tests
+    s <- S.tests
+    f <- F.tests
+    q <- Q.tests
+    return $ m ++ v ++ s ++ f ++ q
