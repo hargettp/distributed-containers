@@ -28,8 +28,10 @@ library
                        stm
   hs-source-dirs:       src
   exposed-modules:
+                        Data.Fifo
                         Distributed.Data.Container
                         Distributed.Data.Map
+                        Distributed.Data.Queue
                         Distributed.Data.Set
                         Distributed.Data.Variable
 
