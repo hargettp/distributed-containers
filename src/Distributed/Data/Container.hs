@@ -40,7 +40,7 @@ import Network.Endpoints
 --------------------------------------------------------------------------------
 
 data Container l e v = Container {
-    containerClient :: Client,
+    containerClient :: TVar Client,
     containerRaft :: Raft l e v
 }
 
@@ -61,8 +61,9 @@ withContainer :: (RaftLog l e v) => Endpoint -> RaftConfiguration -> Name -> l -
 withContainer endpoint cfg name initialLog initialData fn = do
     let initialState = mkRaftState initialData cfg name
     withConsensus endpoint name initialLog initialState $ \vRaft -> do
-        let client = newClient endpoint name cfg
-        fn $ Container client vRaft
+        let client = mkClient endpoint name cfg
+        vClient <- atomically $ newTVar client
+        fn $ Container vClient vRaft
 
 waitUntil :: (RaftLog l e v) => Container l e v -> Index -> IO Index
 waitUntil container index = atomically $ do
@@ -74,7 +75,9 @@ waitUntil container index = atomically $ do
 
 perform :: (RaftLog l e v) => RaftAction e -> Container l e v -> IO Index
 perform action container = do
-    time <- performAction (containerClient container) action
+    client <- atomically $ readTVar $ containerClient container
+    (time,newClient) <- performAction client action
+    atomically $ writeTVar (containerClient container) newClient
     -- here we wait until the action is committed before continuing
     waitUntil container $ logIndex time
 
